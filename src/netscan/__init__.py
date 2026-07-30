@@ -10,6 +10,7 @@ Typical usage:
 """
 
 from netscan.models import PortResult, ScanTarget, ScanReport
+from netscan.scanner import NetworkScanner
 from netscan.exceptions import (
     NetscanError,
     NmapNotFoundError,
@@ -21,6 +22,7 @@ from netscan.exceptions import (
 __version__ = "2.0.0"
 __author__ = "Prateek Raghuvanshi"
 __all__ = [
+    "NetworkScanner",
     "PortResult",
     "ScanTarget",
     "ScanReport",
