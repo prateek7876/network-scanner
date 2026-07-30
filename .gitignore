@@ -1,0 +1,30 @@
+# Virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+
+# Logs
+logs/
+*.log
+
+# Scan results
+scan_results.csv
+scan_results.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
