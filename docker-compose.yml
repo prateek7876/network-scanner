@@ -1,0 +1,14 @@
+services:
+  netscan:
+    build: .
+    command: --help
+    # Uncomment to scan the host network:
+    # network_mode: host
+
+  netscan-scan:
+    build: .
+    image: netscan:latest
+    # Override CMD with your target — but first build the image:
+    #   docker compose build
+    #   docker compose run netscan-scan -t scanme.nmap.org -p 80,443
+    command: -t scanme.nmap.org -p 80,443

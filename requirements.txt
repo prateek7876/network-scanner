@@ -1,3 +1,4 @@
-python-nmap==0.7.1
-colorama==0.4.6
-rich==13.7.0
+# Runtime dependencies — also declared in pyproject.toml
+python-nmap>=0.7.1
+colorama>=0.4.6
+rich>=13.7.0
