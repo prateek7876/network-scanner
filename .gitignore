@@ -7,6 +7,9 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.egg-info/
+dist/
+build/
+*.egg/
 
 # Logs
 logs/
@@ -28,3 +31,18 @@ Thumbs.db
 
 # Environment
 .env
+
+# Coverage
+coverage_html/
+.coverage
+.coverage.*
+htmlcov/
+
+# Docker
+.docker/
+
+# ruff
+.ruff_cache/
+
+# pytest
+.pytest_cache/
