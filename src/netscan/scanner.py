@@ -1,18 +1,40 @@
-"""Core scanning engine wrapping python-nmap."""
+"""Core scanning engine wrapping python-nmap.
+
+Supports multi-threaded scanning of multiple targets and
+real-time progress feedback via *rich*.
+"""
 
 from __future__ import annotations
 
 import logging
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from typing import Any
 
 import nmap
+from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
+from rich.table import Table as RichTable
 
-from netscan.exceptions import NmapNotFoundError, ScanError, InvalidTargetError
+from netscan.exceptions import InvalidTargetError, NmapNotFoundError, ScanError
 from netscan.models import PortResult, ScanReport, ScanTarget
 
 logger = logging.getLogger("netscan.scanner")
+_console = Console()
 
+
+# ---------------------------------------------------------------------------
+# Result parsing helpers
+# ---------------------------------------------------------------------------
 
 def _parse_os_info(host_data: dict[str, Any]) -> dict[str, Any] | None:
     """Extract OS fingerprinting results from nmap host data."""
@@ -20,14 +42,15 @@ def _parse_os_info(host_data: dict[str, Any]) -> dict[str, Any] | None:
         osmatch = host_data.get("osmatch", [])
         if not osmatch:
             return None
-        best_match = osmatch[0]
+        best = osmatch[0]
+        os_class = (best.get("osclass") or [{}])[0]
         return {
-            "name": best_match.get("name", "unknown"),
-            "accuracy": int(best_match.get("accuracy", 0)),
-            "type": best_match.get("osclass", [{}])[0].get("type", ""),
-            "vendor": best_match.get("osclass", [{}])[0].get("vendor", ""),
-            "family": best_match.get("osclass", [{}])[0].get("osfamily", ""),
-            "generation": best_match.get("osclass", [{}])[0].get("osgen", ""),
+            "name": best.get("name", "unknown"),
+            "accuracy": int(best.get("accuracy", 0)),
+            "type": os_class.get("type", ""),
+            "vendor": os_class.get("vendor", ""),
+            "family": os_class.get("osfamily", ""),
+            "generation": os_class.get("osgen", ""),
         }
     except (IndexError, KeyError, ValueError, TypeError):
         return None
@@ -38,22 +61,22 @@ def _parse_port_data(host_data: dict[str, Any]) -> list[PortResult]:
     ports: list[PortResult] = []
     try:
         for proto in host_data.get("protocols", []):
-            proto_name = proto.get("name", "tcp")
-            for port_entry in proto.get("ports", []):
-                port_info = port_entry.get("service", {})
+            name = proto.get("name", "tcp")
+            for p in proto.get("ports", []):
+                svc = p.get("service", {})
                 ports.append(
                     PortResult(
-                        port=port_entry.get("port", 0),
-                        protocol=proto_name,
-                        state=port_entry.get("state", ""),
-                        service=port_info.get("name", ""),
+                        port=p.get("port", 0),
+                        protocol=name,
+                        state=p.get("state", ""),
+                        service=svc.get("name", ""),
                         version=(
-                            f"{port_info.get('version', '')}"
-                            f" {port_info.get('extrainfo', '')}"
+                            f"{svc.get('version', '')}"
+                            f" {svc.get('extrainfo', '')}"
                         ).strip(),
-                        product=port_info.get("product", ""),
+                        product=svc.get("product", ""),
                         banner=None,
-                        extra=port_info.get("extrainfo", ""),
+                        extra=svc.get("extrainfo", ""),
                     )
                 )
     except (KeyError, TypeError) as exc:
@@ -61,8 +84,48 @@ def _parse_port_data(host_data: dict[str, Any]) -> list[PortResult]:
     return ports
 
 
+def _build_report(
+    scanner: nmap.PortScanner,
+    scan_type: str,
+) -> ScanReport:
+    """Convert raw nmap host data into a ScanReport."""
+    targets: list[ScanTarget] = []
+    for host in scanner.all_hosts():
+        data = scanner[host]
+        raw = data if isinstance(data, dict) else {}
+
+        ports = _parse_port_data(raw)
+        os_info = _parse_os_info(raw)
+        hostname = ""
+        hn = raw.get("hostname")
+        if isinstance(hn, list) and hn:
+            hostname = hn[0].get("name", "")
+        elif isinstance(hn, str):
+            hostname = hn
+
+        targets.append(
+            ScanTarget(
+                ip=host,
+                hostname=hostname,
+                state=raw.get("status", {}).get("state", "unknown"),
+                os_info=os_info,
+                ports=ports,
+            )
+        )
+
+    return ScanReport(
+        scan_time=datetime.now(timezone.utc).isoformat(),
+        scan_type=scan_type,
+        targets=targets,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scanner class
+# ---------------------------------------------------------------------------
+
 class NetworkScanner:
-    """Advanced port scanner with OS detection and service fingerprinting.
+    """Advanced port scanner with multi-threading and progress feedback.
 
     Usage:
         scanner = NetworkScanner()
@@ -78,57 +141,65 @@ class NetworkScanner:
     }
 
     def __init__(self) -> None:
-        """Initialize the nmap scanner engine."""
+        """Initialise the nmap scanner engine."""
         try:
             self._scanner = nmap.PortScanner()
-            logger.debug("Nmap scanner engine initialized")
+            logger.debug("Nmap scanner engine initialised")
         except nmap.PortScannerError:
             raise NmapNotFoundError
 
+    # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
+
+    _SAFE_TARGET_RE = re.compile(r"^[\w\.\-/:]+$")
+
     def validate_target(self, target: str) -> bool:
-        """Check if a target is reachable and valid.
+        """Check whether *target* is reachable (ping probe).
 
         Args:
             target: IP address, CIDR range, or hostname.
 
         Returns:
-            True if the target responds to a ping probe.
+            ``True`` if the target is valid and responds.
         """
-        if not target or not target.strip():
+        target = target.strip()
+        if not target or not self._SAFE_TARGET_RE.match(target):
             return False
-
-        # Basic input sanitisation
-        if not re.match(r"^[\w\.\-/:]+$", target.strip()):
-            logger.warning("Target contains suspect characters: %s", target)
-            return False
-
         try:
-            self._scanner.scan(target.strip(), arguments="-sn")
+            self._scanner.scan(target, arguments="-sn")
             return True
-        except Exception as exc:
-            logger.debug("Target validation failed for %s: %s", target, exc)
+        except Exception:
             return False
+
+    # ------------------------------------------------------------------
+    # Single-target scan
+    # ------------------------------------------------------------------
 
     def scan_target(
         self,
         target: str,
         ports: str = "1-1024",
         scan_type: str = "quick",
+        show_progress: bool = False,
     ) -> ScanReport:
-        """Run a scan against *target* and return a structured report.
+        """Run a scan against a single target (or CIDR range).
 
         Args:
             target: IP, CIDR, or range to scan.
-            ports: Port specification (e.g. ``"22,80,443"``, ``"1-65535"``).
+            ports: Port spec (e.g. ``"22,80,443"``, ``"1-65535"``).
             scan_type: One of ``"quick"``, ``"full"``, ``"stealth"``,
                        ``"os-detection"``.
+            show_progress: Show a live progress bar (doesn't add much
+                           for a single target but available for
+                           consistency).
 
         Returns:
-            A :class:`ScanReport` containing all results.
+            A :class:`ScanReport` with results.
 
         Raises:
-            InvalidTargetError: The target was empty or malformed.
-            ScanError: The nmap scan itself failed.
+            InvalidTargetError: Empty or malformed target.
+            ScanError: The nmap scan failed.
         """
         target = target.strip()
         if not target:
@@ -137,56 +208,149 @@ class NetworkScanner:
         arguments = self.SCAN_PROFILES.get(scan_type, "-sV")
         logger.info(
             "Starting %s scan on %s (ports=%s, args=%s)",
-            scan_type,
-            target,
-            ports,
-            arguments,
+            scan_type, target, ports, arguments,
         )
 
-        try:
-            self._scanner.scan(target, ports, arguments)
-        except Exception as exc:
-            raise ScanError(target, str(exc))
+        if show_progress:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                console=_console,
+            ) as progress:
+                task = progress.add_task(
+                    f"Scanning {target} ({ports})…", total=1,
+                )
+                try:
+                    self._scanner.scan(target, ports, arguments)
+                except Exception as exc:
+                    raise ScanError(target, str(exc))
+                progress.update(task, completed=1)
+        else:
+            try:
+                self._scanner.scan(target, ports, arguments)
+            except Exception as exc:
+                raise ScanError(target, str(exc))
 
-        report = self._build_report(target, scan_type)
-
+        report = _build_report(self._scanner, scan_type)
         logger.info(
-            "Scan finished: %d host(s), %d open port(s)",
-            report.total_hosts,
-            report.total_open_ports,
+            "Finished: %d host(s), %d open port(s)",
+            report.total_hosts, report.total_open_ports,
         )
         return report
 
-    def _build_report(self, target: str, scan_type: str) -> ScanReport:
-        """Convert raw nmap host data into a ScanReport."""
-        import time
-        from datetime import datetime, timezone
+    # ------------------------------------------------------------------
+    # Multi-target scan (threaded + progress)
+    # ------------------------------------------------------------------
 
-        scan_targets: list[ScanTarget] = []
+    def scan_targets(
+        self,
+        targets: list[str],
+        ports: str = "1-1024",
+        scan_type: str = "quick",
+        max_workers: int = 10,
+    ) -> ScanReport:
+        """Scan multiple targets concurrently with a progress bar.
 
-        for host in self._scanner.all_hosts():
-            host_data = self._scanner[host]
+        Each target is dispatched to its own worker thread.
 
-            # nmap.python outputs a dict — convert to our model
-            raw = host_data if isinstance(host_data, dict) else {}
+        Args:
+            targets: List of IP addresses / hostnames.
+            ports: Port spec forwarded to every target scan.
+            scan_type: Scan profile name.
+            max_workers: Thread-pool size.
 
-            ports = _parse_port_data(raw)
-            os_info = _parse_os_info(raw)
+        Returns:
+            A merged :class:`ScanReport` covering all targets.
 
-            scan_targets.append(
-                ScanTarget(
-                    ip=host,
-                    hostname=raw.get("hostname", [{}])[0].get("name", "")
-                    if isinstance(raw.get("hostname"), list)
-                    else raw.get("hostname", ""),
-                    state=raw.get("status", {}).get("state", "unknown"),
-                    os_info=os_info,
-                    ports=ports,
-                )
+        Raises:
+            ScanError: If every single target fails.
+        """
+        arguments = self.SCAN_PROFILES.get(scan_type, "-sV")
+        total = len(targets)
+        logger.info(
+            "Scanning %d target(s) with %d worker(s) …",
+            total, max_workers,
+        )
+
+        merged_targets: list[ScanTarget] = []
+        errors: list[str] = []
+
+        progress_bar = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
+            console=_console,
+        )
+
+        with progress_bar:
+            scan_task = progress_bar.add_task(
+                f"Scanning {total} target(s) …", total=total,
             )
 
-        return ScanReport(
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                future_map = {}
+                for tgt in targets:
+                    tgt = tgt.strip()
+                    if not tgt:
+                        continue
+                    future = pool.submit(self._scan_single, tgt, ports, arguments)
+                    future_map[future] = tgt
+
+                for future in as_completed(future_map):
+                    tgt = future_map[future]
+                    try:
+                        result = future.result()
+                        if result:
+                            merged_targets.extend(result)
+                    except ScanError as exc:
+                        errors.append(str(exc))
+                        logger.warning("Target %s failed: %s", tgt, exc)
+                    except Exception as exc:
+                        errors.append(f"{tgt}: {exc}")
+                        logger.error("Unexpected error for %s: %s", tgt, exc)
+                    finally:
+                        progress_bar.update(scan_task, advance=1)
+
+        report = ScanReport(
             scan_time=datetime.now(timezone.utc).isoformat(),
             scan_type=scan_type,
-            targets=scan_targets,
+            targets=merged_targets,
         )
+
+        logger.info(
+            "Multi-target scan complete: %d host(s), %d open port(s)",
+            report.total_hosts, report.total_open_ports,
+        )
+
+        if errors:
+            logger.warning("Errors encountered: %s", "; ".join(errors))
+            _console.print(
+                f"[yellow]! {len(errors)} target(s) had errors — "
+                "check the logs for details[/]"
+            )
+
+        return report
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _scan_single(
+        self,
+        target: str,
+        ports: str,
+        arguments: str,
+    ) -> list[ScanTarget] | None:
+        """Run nmap against one target and return its parsed targets."""
+        try:
+            self._scanner.scan(target, ports, arguments)
+            report = _build_report(self._scanner, "direct")
+            return report.targets
+        except Exception as exc:
+            raise ScanError(target, str(exc))

@@ -180,11 +180,23 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         scanner = NetworkScanner()
-        report = scanner.scan_target(
-            target=args.target,
-            ports=args.ports,
-            scan_type=scan_type,
-        )
+
+        # Support comma-separated list of targets
+        target_list = [t.strip() for t in args.target.split(",") if t.strip()]
+        if len(target_list) > 1:
+            report = scanner.scan_targets(
+                targets=target_list,
+                ports=args.ports,
+                scan_type=scan_type,
+                max_workers=args.threads,
+            )
+        else:
+            report = scanner.scan_target(
+                target=target_list[0],
+                ports=args.ports,
+                scan_type=scan_type,
+                show_progress=True,
+            )
     except NetscanError as exc:
         logger.error(str(exc))
         print(f"{Fore.RED}[!] {exc}{Style.RESET_ALL}")
