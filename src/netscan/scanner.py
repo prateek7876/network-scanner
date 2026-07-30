@@ -163,7 +163,7 @@ class NetworkScanner:
         Returns:
             ``True`` if the target is valid and responds.
         """
-        target = target.strip()
+        target = target.strip() if target else ""
         if not target or not self._SAFE_TARGET_RE.match(target):
             return False
         try:
