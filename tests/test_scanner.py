@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,6 +11,7 @@ from netscan.exceptions import (
     NmapNotFoundError,
     ScanError,
 )
+from netscan.scanner import _build_report, _parse_os_info, _parse_port_data
 
 
 def test_scanner_init_success() -> None:
@@ -146,3 +147,148 @@ def test_scan_targets_multi(mock_nmap_scanner) -> None:  # type: ignore[no-untyp
         # Each mock scan returns the same host, so we get 2 target groups
         assert report.total_hosts >= 1
         assert report.scan_type == "quick"
+
+
+# ---------------------------------------------------------------------------
+# Result-parsing helpers (edge cases)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_os_info_missing_osmatch() -> None:
+    """No osmatch data should produce no OS info."""
+    assert _parse_os_info({}) is None
+    assert _parse_os_info({"osmatch": []}) is None
+
+
+def test_parse_os_info_malformed_accuracy() -> None:
+    """A non-integer accuracy should be swallowed (returns None)."""
+    data = {"osmatch": [{"name": "X", "accuracy": "not-an-int"}]}
+    assert _parse_os_info(data) is None
+
+
+def test_parse_port_data_type_error() -> None:
+    """Malformed protocols data should produce an empty port list."""
+    assert _parse_port_data({"protocols": None}) == []
+
+
+def test_parse_port_data_missing_ports_key() -> None:
+    """A protocol entry without a ports key should be tolerated."""
+    data = {"protocols": [{"name": "tcp"}]}
+    assert _parse_port_data(data) == []
+
+
+def test_build_report_string_hostname() -> None:
+    """Hostname given as a plain string should be used directly."""
+    host_data = {
+        "hostname": "plain.host",
+        "status": {"state": "up"},
+        "protocols": [],
+    }
+    scanner = MagicMock()
+    scanner.all_hosts.return_value = ["10.0.0.9"]
+    scanner.__getitem__.return_value = host_data
+
+    report = _build_report(scanner, "quick")
+    assert report.targets[0].hostname == "plain.host"
+    assert report.targets[0].state == "up"
+
+
+# ---------------------------------------------------------------------------
+# Scanner edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_validate_target_scan_exception() -> None:
+    """A failed ping probe should fail validation."""
+    with patch("nmap.PortScanner") as mock_nmap:
+        mock_nmap.return_value.scan.side_effect = RuntimeError("nmap failed")
+        from netscan.scanner import NetworkScanner
+
+        scanner = NetworkScanner()
+        assert scanner.validate_target("192.168.1.1") is False
+
+
+def test_scan_target_show_progress(mock_nmap_scanner) -> None:  # type: ignore[no-untyped-def]
+    """Single-target scan with the rich progress bar enabled."""
+    with patch("nmap.PortScanner", return_value=mock_nmap_scanner):
+        from netscan.scanner import NetworkScanner
+
+        scanner = NetworkScanner()
+        report = scanner.scan_target(
+            "192.168.1.1",
+            ports="22,80",
+            scan_type="quick",
+            show_progress=True,
+        )
+        assert report.total_hosts == 1
+        assert report.total_open_ports == 2
+
+
+def test_scan_target_show_progress_error() -> None:
+    """Progress-path scan failures should raise ScanError."""
+    with patch("nmap.PortScanner") as mock_nmap:
+        mock_nmap.return_value.scan.side_effect = RuntimeError("boom")
+        from netscan.scanner import NetworkScanner
+
+        scanner = NetworkScanner()
+        with pytest.raises(ScanError):
+            scanner.scan_target("192.168.1.1", show_progress=True)
+
+
+def test_scan_targets_skips_blank_targets(mock_nmap_scanner) -> None:  # type: ignore[no-untyped-def]
+    """Blank entries in the target list should be skipped, not scanned."""
+    with patch("nmap.PortScanner", return_value=mock_nmap_scanner):
+        from netscan.scanner import NetworkScanner
+
+        scanner = NetworkScanner()
+        report = scanner.scan_targets(
+            targets=["", "   ", "10.0.0.1"],
+            ports="22",
+            scan_type="quick",
+        )
+        assert report.total_hosts >= 1
+
+
+def test_scan_targets_collects_scan_errors(mock_nmap_scanner) -> None:  # type: ignore[no-untyped-def]
+    """A failing worker should be collected as an error, not crash the scan."""
+    with patch("nmap.PortScanner", return_value=mock_nmap_scanner):
+        from netscan.scanner import NetworkScanner
+
+        scanner = NetworkScanner()
+        with patch.object(
+            scanner, "_scan_single", side_effect=ScanError("10.0.0.5", "down")
+        ):
+            report = scanner.scan_targets(
+                targets=["10.0.0.5"],
+                ports="22",
+                scan_type="quick",
+            )
+        assert report.total_hosts == 0
+
+
+def test_scan_targets_collects_unexpected_errors(mock_nmap_scanner) -> None:  # type: ignore[no-untyped-def]
+    """Non-ScanError exceptions from a worker should also be collected."""
+    with patch("nmap.PortScanner", return_value=mock_nmap_scanner):
+        from netscan.scanner import NetworkScanner
+
+        scanner = NetworkScanner()
+        with patch.object(
+            scanner, "_scan_single", side_effect=RuntimeError("unexpected")
+        ):
+            report = scanner.scan_targets(
+                targets=["10.0.0.6"],
+                ports="22",
+                scan_type="quick",
+            )
+        assert report.total_hosts == 0
+
+
+def test_scan_single_raises_scan_error(mock_nmap_scanner) -> None:  # type: ignore[no-untyped-def]
+    """The private single-scan helper should wrap failures in ScanError."""
+    with patch("nmap.PortScanner", return_value=mock_nmap_scanner):
+        from netscan.scanner import NetworkScanner
+
+        scanner = NetworkScanner()
+        scanner._scanner.scan.side_effect = ConnectionError("refused")
+        with pytest.raises(ScanError):
+            scanner._scan_single("10.0.0.7", "22", "-sV")

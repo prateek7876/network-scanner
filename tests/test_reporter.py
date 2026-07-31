@@ -10,7 +10,7 @@ import pytest
 
 from netscan.exceptions import ExportError
 from netscan.models import PortResult, ScanReport, ScanTarget
-from netscan.reporter import export_csv, export_html, export_json
+from netscan.reporter import display_report, export_csv, export_html, export_json
 
 
 def _sample_report() -> ScanReport:
@@ -142,3 +142,123 @@ class TestHtmlExport:
             assert "<!DOCTYPE html>" in content
         finally:
             Path(path).unlink(missing_ok=True)
+
+
+class TestExportErrorPaths:
+    """Export failures should raise ExportError."""
+
+    def test_json_permission_error(self) -> None:
+        report = _sample_report()
+        with pytest.raises(ExportError):
+            export_json(report, "/nonexistent/path/report.json")
+
+    def test_html_permission_error(self) -> None:
+        report = _sample_report()
+        with pytest.raises(ExportError):
+            export_html(report, "/nonexistent/path/report.html")
+
+
+class TestDisplayReport:
+    """Terminal report rendering (captured via capsys)."""
+
+    def test_prints_hosts_and_ports(self, capsys, scan_report) -> None:  # type: ignore[no-untyped-def]
+        display_report(scan_report)
+        out = capsys.readouterr().out
+
+        assert "SCAN RESULTS" in out
+        assert "quick" in out
+        assert "192.168.1.1" in out
+        assert "router.local" in out
+        assert "ssh" in out
+        assert "http" in out
+        assert "1 host(s), 2 open port(s)" in out
+
+    def test_empty_report_warns(self, capsys) -> None:
+        report = ScanReport(scan_time="now", scan_type="test")
+        display_report(report)
+        out = capsys.readouterr().out
+        assert "No hosts found" in out
+
+    def test_shows_os_info(self, capsys, scan_target) -> None:  # type: ignore[no-untyped-def]
+        scan_target.os_info = {"name": "Linux 2.6.32", "accuracy": 95}
+        report = ScanReport(
+            scan_time="now",
+            scan_type="os-detection",
+            targets=[scan_target],
+        )
+        display_report(report)
+        out = capsys.readouterr().out
+        assert "Linux 2.6.32" in out
+        assert "95%" in out
+
+    def test_shows_banner(self, capsys, scan_target) -> None:  # type: ignore[no-untyped-def]
+        scan_target.ports[0].banner = "SSH-2.0-OpenSSH_8.2"
+        report = ScanReport(
+            scan_time="now",
+            scan_type="quick",
+            targets=[scan_target],
+        )
+        display_report(report)
+        out = capsys.readouterr().out
+        assert "Banner:" in out
+        assert "SSH-2.0-OpenSSH_8.2" in out
+
+    def test_no_ports_prints_notice(self, capsys) -> None:
+        report = ScanReport(
+            scan_time="now",
+            scan_type="quick",
+            targets=[ScanTarget(ip="10.0.0.1", hostname="h", state="up", ports=[])],
+        )
+        display_report(report)
+        out = capsys.readouterr().out
+        assert "No open ports found" in out
+
+    def test_port_state_colours(self, capsys) -> None:
+        report = ScanReport(
+            scan_time="now",
+            scan_type="quick",
+            targets=[
+                ScanTarget(
+                    ip="10.0.0.1",
+                    hostname="h",
+                    state="up",
+                    ports=[
+                        PortResult(
+                            port=22,
+                            protocol="tcp",
+                            state="open",
+                            service="ssh",
+                            version="",
+                            product="",
+                        ),
+                        PortResult(
+                            port=443,
+                            protocol="tcp",
+                            state="filtered",
+                            service="https",
+                            version="",
+                            product="",
+                        ),
+                        PortResult(
+                            port=80,
+                            protocol="tcp",
+                            state="closed",
+                            service="http",
+                            version="",
+                            product="",
+                        ),
+                    ],
+                )
+            ],
+        )
+        display_report(report)
+        out = capsys.readouterr().out
+        assert "open" in out
+        assert "filtered" in out
+        assert "closed" in out
+
+    def test_duration_omitted_when_zero(self, capsys) -> None:
+        report = ScanReport(scan_time="now", scan_type="quick", duration_seconds=0.0)
+        display_report(report)
+        out = capsys.readouterr().out
+        assert "Duration:" not in out
