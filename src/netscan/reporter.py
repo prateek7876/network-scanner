@@ -89,24 +89,36 @@ def export_csv(report: ScanReport, path: str | Path) -> None:
     try:
         with open(path, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow([
-                "IP", "Hostname", "State", "Protocol", "Port",
-                "Port State", "Service", "Version", "Product", "Banner",
-            ])
+            writer.writerow(
+                [
+                    "IP",
+                    "Hostname",
+                    "State",
+                    "Protocol",
+                    "Port",
+                    "Port State",
+                    "Service",
+                    "Version",
+                    "Product",
+                    "Banner",
+                ]
+            )
             for target in report.targets:
                 for port in target.ports:
-                    writer.writerow([
-                        target.ip,
-                        target.hostname,
-                        target.state,
-                        port.protocol,
-                        port.port,
-                        port.state,
-                        port.service,
-                        port.version,
-                        port.product,
-                        port.banner or "",
-                    ])
+                    writer.writerow(
+                        [
+                            target.ip,
+                            target.hostname,
+                            target.state,
+                            port.protocol,
+                            port.port,
+                            port.state,
+                            port.service,
+                            port.version,
+                            port.product,
+                            port.banner or "",
+                        ]
+                    )
         logger.info("CSV report saved: %s", path)
     except OSError as exc:
         raise ExportError("CSV", str(exc))
@@ -216,8 +228,8 @@ def _host_section_html(target: Any) -> str:
     """Build an HTML row showing host info."""
     cols = (
         f'<td colspan="7" class="host-header">'
-        f'📡 {target.ip} ({target.hostname}) — {target.state}'
-        f'</td>'
+        f"📡 {target.ip} ({target.hostname}) — {target.state}"
+        f"</td>"
     )
     return f"<tr>{cols}</tr>"
 
@@ -226,7 +238,7 @@ def _port_row_html(port: Any, target: Any) -> str:
     """Build an HTML row for a single port."""
     state_class = f"state-{port.state}"
     badge = f'<span class="badge badge-{port.state}">{port.state}</span>'
-    banner = (port.banner[:80] if port.banner else "")
+    banner = port.banner[:80] if port.banner else ""
     return (
         f"<tr>"
         f"<td></td>"

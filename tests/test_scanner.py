@@ -18,6 +18,7 @@ def test_scanner_init_success() -> None:
     with patch("nmap.PortScanner") as mock_nmap:
         mock_nmap.return_value.all_hosts.return_value = []
         from netscan.scanner import NetworkScanner
+
         scanner = NetworkScanner()
         assert scanner is not None
 
@@ -29,6 +30,7 @@ def test_scanner_init_failure() -> None:
     with patch("nmap.PortScanner") as mock_nmap:
         mock_nmap.side_effect = PortScannerError("nmap not found")
         from netscan.scanner import NetworkScanner
+
         with pytest.raises(NmapNotFoundError):
             NetworkScanner()
 
@@ -38,6 +40,7 @@ def test_validate_target_empty() -> None:
     with patch("nmap.PortScanner") as mock_nmap:
         mock_nmap.return_value.all_hosts.return_value = []
         from netscan.scanner import NetworkScanner
+
         scanner = NetworkScanner()
         assert scanner.validate_target("") is False
         assert scanner.validate_target("   ") is False
@@ -49,6 +52,7 @@ def test_validate_target_suspect_chars() -> None:
     with patch("nmap.PortScanner") as mock_nmap:
         mock_nmap.return_value.all_hosts.return_value = []
         from netscan.scanner import NetworkScanner
+
         scanner = NetworkScanner()
         assert scanner.validate_target("; rm -rf /") is False
         assert scanner.validate_target("$(whoami)") is False
@@ -57,8 +61,9 @@ def test_validate_target_suspect_chars() -> None:
 
 def test_validate_target_valid() -> None:
     """A valid, reachable target should pass."""
-    with patch("nmap.PortScanner") as mock_nmap:
+    with patch("nmap.PortScanner"):
         from netscan.scanner import NetworkScanner
+
         scanner = NetworkScanner()
         result = scanner.validate_target("192.168.1.1")
         assert result is True
@@ -69,6 +74,7 @@ def test_scan_target_empty() -> None:
     with patch("nmap.PortScanner") as mock_nmap:
         mock_nmap.return_value.all_hosts.return_value = []
         from netscan.scanner import NetworkScanner
+
         scanner = NetworkScanner()
         with pytest.raises(InvalidTargetError, match="Target cannot be empty"):
             scanner.scan_target("  ")
@@ -80,6 +86,7 @@ def test_scan_target_nmap_error() -> None:
         instance = mock_nmap.return_value
         instance.scan.side_effect = RuntimeError("connection timeout")
         from netscan.scanner import NetworkScanner
+
         scanner = NetworkScanner()
         with pytest.raises(ScanError):
             scanner.scan_target("192.168.1.1")
@@ -89,6 +96,7 @@ def test_scan_target_success(mock_nmap_scanner) -> None:  # type: ignore[no-unty
     """A successful scan should produce a populated ScanReport."""
     with patch("nmap.PortScanner", return_value=mock_nmap_scanner):
         from netscan.scanner import NetworkScanner
+
         scanner = NetworkScanner()
         report = scanner.scan_target("192.168.1.1")
 
@@ -114,6 +122,7 @@ def test_scan_target_with_os_detection(mock_nmap_scanner) -> None:  # type: igno
     """OS detection scan should populate os_info."""
     with patch("nmap.PortScanner", return_value=mock_nmap_scanner):
         from netscan.scanner import NetworkScanner
+
         scanner = NetworkScanner()
         report = scanner.scan_target("192.168.1.1", scan_type="os-detection")
         target = report.targets[0]
@@ -126,6 +135,7 @@ def test_scan_targets_multi(mock_nmap_scanner) -> None:  # type: ignore[no-untyp
     """Multi-target scan should process each target."""
     with patch("nmap.PortScanner", return_value=mock_nmap_scanner):
         from netscan.scanner import NetworkScanner
+
         scanner = NetworkScanner()
         report = scanner.scan_targets(
             targets=["10.0.0.1", "10.0.0.2"],

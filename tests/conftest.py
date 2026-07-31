@@ -9,7 +9,6 @@ import pytest
 
 from netscan.models import PortResult, ScanReport, ScanTarget
 
-
 # ---------------------------------------------------------------------------
 # Sample data
 # ---------------------------------------------------------------------------
@@ -87,12 +86,22 @@ def scan_target() -> ScanTarget:
         hostname="router.local",
         state="up",
         ports=[
-            PortResult(port=22, protocol="tcp", state="open",
-                       service="ssh", version="8.2p1",
-                       product="OpenSSH"),
-            PortResult(port=80, protocol="tcp", state="open",
-                       service="http", version="2.4.41",
-                       product="Apache httpd"),
+            PortResult(
+                port=22,
+                protocol="tcp",
+                state="open",
+                service="ssh",
+                version="8.2p1",
+                product="OpenSSH",
+            ),
+            PortResult(
+                port=80,
+                protocol="tcp",
+                state="open",
+                service="http",
+                version="2.4.41",
+                product="Apache httpd",
+            ),
         ],
     )
 
@@ -116,12 +125,26 @@ def mock_nmap_scanner() -> MagicMock:
     """
     # Build protocol/port structure
     services = [
-        {"port": 22, "state": "open",
-         "service": {"name": "ssh", "product": "OpenSSH",
-                     "version": "8.2p1", "extrainfo": ""}},
-        {"port": 80, "state": "open",
-         "service": {"name": "http", "product": "Apache httpd",
-                     "version": "2.4.41", "extrainfo": "(Ubuntu)"}},
+        {
+            "port": 22,
+            "state": "open",
+            "service": {
+                "name": "ssh",
+                "product": "OpenSSH",
+                "version": "8.2p1",
+                "extrainfo": "",
+            },
+        },
+        {
+            "port": 80,
+            "state": "open",
+            "service": {
+                "name": "http",
+                "product": "Apache httpd",
+                "version": "2.4.41",
+                "extrainfo": "(Ubuntu)",
+            },
+        },
     ]
 
     host_data = {

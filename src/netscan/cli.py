@@ -35,7 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="netscan",
         description="Advanced Network Scanner — port detection, "
-                    "service fingerprinting, and banner grabbing",
+        "service fingerprinting, and banner grabbing",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
@@ -48,14 +48,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Target
     parser.add_argument(
-        "-t", "--target",
+        "-t",
+        "--target",
         required=True,
         help="Target IP, CIDR range, or hostname",
     )
 
     # Ports
     parser.add_argument(
-        "-p", "--ports",
+        "-p",
+        "--ports",
         default="1-1024",
         help="Port range or comma-separated list (default: 1-1024)",
     )
@@ -99,7 +101,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Export results to HTML report",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         default=None,
         help="Output filename base (without extension)",
     )
@@ -121,7 +124,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Verbosity
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Enable verbose/debug logging",
     )
@@ -164,13 +168,16 @@ def main(argv: list[str] | None = None) -> int:
     # Logging
     log_level = "DEBUG" if args.verbose else "INFO"
     from netscan.logger import setup_logging
+
     setup_logging(level=log_level)
 
     logger = __import__("logging").getLogger("netscan.cli")
     logger.debug("CLI arguments: %s", args)
 
     scan_type = _resolve_scan_type(args)
-    output_base = args.output or f"netscan_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    output_base = args.output or (
+        f"netscan_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    )
 
     print(f"{Fore.YELLOW}[*] Target:     {args.target}{Style.RESET_ALL}")
     print(f"{Fore.YELLOW}[*] Ports:      {args.ports}{Style.RESET_ALL}")
@@ -204,6 +211,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Display results
     from netscan.reporter import display_report
+
     display_report(report)
 
     # Banner grabbing
@@ -211,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n{Fore.CYAN}[*] Starting banner grabbing...{Style.RESET_ALL}")
         try:
             from netscan.banner import grab_banners
+
             report = grab_banners(report, max_workers=args.threads)
         except NetscanError as exc:
             logger.warning("Banner grabbing skipped: %s", exc)
@@ -218,6 +227,7 @@ def main(argv: list[str] | None = None) -> int:
     # Export
     if args.csv:
         from netscan.reporter import export_csv
+
         path = f"{output_base}.csv"
         try:
             export_csv(report, path)
@@ -227,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json:
         from netscan.reporter import export_json
+
         path = f"{output_base}.json"
         try:
             export_json(report, path)
@@ -236,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.html:
         from netscan.reporter import export_html
+
         path = f"{output_base}.html"
         try:
             export_html(report, path)
@@ -243,8 +255,10 @@ def main(argv: list[str] | None = None) -> int:
         except NetscanError as exc:
             logger.error("HTML export failed: %s", exc)
 
-    print(f"\n{Fore.GREEN}[✓] Scan complete — {report.total_hosts} host(s), "
-          f"{report.total_open_ports} open port(s){Style.RESET_ALL}\n")
+    print(
+        f"\n{Fore.GREEN}[✓] Scan complete — {report.total_hosts} host(s), "
+        f"{report.total_open_ports} open port(s){Style.RESET_ALL}\n"
+    )
     return 0
 
 

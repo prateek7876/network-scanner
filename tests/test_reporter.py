@@ -25,8 +25,11 @@ def _sample_report() -> ScanReport:
                 state="up",
                 ports=[
                     PortResult(
-                        port=22, protocol="tcp", state="open",
-                        service="ssh", version="8.2p1",
+                        port=22,
+                        protocol="tcp",
+                        state="open",
+                        service="ssh",
+                        version="8.2p1",
                         product="OpenSSH",
                     ),
                 ],
@@ -41,8 +44,7 @@ class TestCsvExport:
 
     def test_export_basic(self) -> None:
         report = _sample_report()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv",
-                                         delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
             path = tmp.name
 
         try:
@@ -57,8 +59,7 @@ class TestCsvExport:
 
     def test_export_empty_report(self) -> None:
         report = ScanReport(scan_time="now", scan_type="test")
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv",
-                                         delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
             path = tmp.name
 
         try:
@@ -81,8 +82,7 @@ class TestJsonExport:
 
     def test_export_basic(self) -> None:
         report = _sample_report()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
-                                         delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             path = tmp.name
 
         try:
@@ -98,8 +98,7 @@ class TestJsonExport:
     def test_export_round_trip(self) -> None:
         """Export and verify the JSON structure."""
         report = _sample_report()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json",
-                                         delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             path = tmp.name
 
         try:
@@ -119,8 +118,7 @@ class TestHtmlExport:
 
     def test_export_basic(self) -> None:
         report = _sample_report()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".html",
-                                         delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False) as tmp:
             path = tmp.name
 
         try:
@@ -135,8 +133,7 @@ class TestHtmlExport:
 
     def test_export_empty(self) -> None:
         report = ScanReport(scan_time="now", scan_type="test")
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".html",
-                                         delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False) as tmp:
             path = tmp.name
 
         try:

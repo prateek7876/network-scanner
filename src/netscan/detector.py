@@ -61,7 +61,9 @@ def enrich_service_name(port: int, detected_name: str) -> str:
     if detected_name in ("unknown", "", "tcpwrapped"):
         hint = SERVICE_HINTS.get(port)
         if hint:
-            logger.debug("Enriched port %d service: %s -> %s", port, detected_name, hint)
+            logger.debug(
+                "Enriched port %d service: %s -> %s", port, detected_name, hint
+            )
             return f"{hint} (detected: {detected_name})"
     return detected_name
 

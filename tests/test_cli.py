@@ -28,16 +28,24 @@ class TestArgumentParser:
     def test_all_flags(self) -> None:
         """All optional flags parse correctly."""
         parser = _build_parser()
-        args = parser.parse_args([
-            "-t", "10.0.0.1",
-            "-p", "22,80,443",
-            "--full",
-            "--csv", "--json", "--html",
-            "--banner-grab",
-            "--threads", "20",
-            "-v",
-            "-o", "my_scan",
-        ])
+        args = parser.parse_args(
+            [
+                "-t",
+                "10.0.0.1",
+                "-p",
+                "22,80,443",
+                "--full",
+                "--csv",
+                "--json",
+                "--html",
+                "--banner-grab",
+                "--threads",
+                "20",
+                "-v",
+                "-o",
+                "my_scan",
+            ]
+        )
         assert args.target == "10.0.0.1"
         assert args.ports == "22,80,443"
         assert args.full is True

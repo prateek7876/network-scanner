@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
@@ -23,7 +22,6 @@ from rich.progress import (
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
-from rich.table import Table as RichTable
 
 from netscan.exceptions import InvalidTargetError, NmapNotFoundError, ScanError
 from netscan.models import PortResult, ScanReport, ScanTarget
@@ -35,6 +33,7 @@ _console = Console()
 # ---------------------------------------------------------------------------
 # Result parsing helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_os_info(host_data: dict[str, Any]) -> dict[str, Any] | None:
     """Extract OS fingerprinting results from nmap host data."""
@@ -71,8 +70,7 @@ def _parse_port_data(host_data: dict[str, Any]) -> list[PortResult]:
                         state=p.get("state", ""),
                         service=svc.get("name", ""),
                         version=(
-                            f"{svc.get('version', '')}"
-                            f" {svc.get('extrainfo', '')}"
+                            f"{svc.get('version', '')}" f" {svc.get('extrainfo', '')}"
                         ).strip(),
                         product=svc.get("product", ""),
                         banner=None,
@@ -123,6 +121,7 @@ def _build_report(
 # ---------------------------------------------------------------------------
 # Scanner class
 # ---------------------------------------------------------------------------
+
 
 class NetworkScanner:
     """Advanced port scanner with multi-threading and progress feedback.
@@ -208,7 +207,10 @@ class NetworkScanner:
         arguments = self.SCAN_PROFILES.get(scan_type, "-sV")
         logger.info(
             "Starting %s scan on %s (ports=%s, args=%s)",
-            scan_type, target, ports, arguments,
+            scan_type,
+            target,
+            ports,
+            arguments,
         )
 
         if show_progress:
@@ -221,7 +223,8 @@ class NetworkScanner:
                 console=_console,
             ) as progress:
                 task = progress.add_task(
-                    f"Scanning {target} ({ports})…", total=1,
+                    f"Scanning {target} ({ports})…",
+                    total=1,
                 )
                 try:
                     self._scanner.scan(target, ports, arguments)
@@ -237,7 +240,8 @@ class NetworkScanner:
         report = _build_report(self._scanner, scan_type)
         logger.info(
             "Finished: %d host(s), %d open port(s)",
-            report.total_hosts, report.total_open_ports,
+            report.total_hosts,
+            report.total_open_ports,
         )
         return report
 
@@ -272,7 +276,8 @@ class NetworkScanner:
         total = len(targets)
         logger.info(
             "Scanning %d target(s) with %d worker(s) …",
-            total, max_workers,
+            total,
+            max_workers,
         )
 
         merged_targets: list[ScanTarget] = []
@@ -290,7 +295,8 @@ class NetworkScanner:
 
         with progress_bar:
             scan_task = progress_bar.add_task(
-                f"Scanning {total} target(s) …", total=total,
+                f"Scanning {total} target(s) …",
+                total=total,
             )
 
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -325,7 +331,8 @@ class NetworkScanner:
 
         logger.info(
             "Multi-target scan complete: %d host(s), %d open port(s)",
-            report.total_hosts, report.total_open_ports,
+            report.total_hosts,
+            report.total_open_ports,
         )
 
         if errors:

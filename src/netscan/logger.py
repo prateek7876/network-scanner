@@ -49,16 +49,16 @@ def setup_logging(
     log_path = os.path.join(log_dir, f"netscan_{timestamp}.log")
 
     file_handler = RotatingFileHandler(
-        log_path, maxBytes=10 * 1024 * 1024, backupCount=5,
+        log_path,
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
     )
     file_handler.setLevel(logging.DEBUG)
     if log_format == "json":
         file_handler.setFormatter(_JsonFormatter())
     else:
         fmt = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
-        file_handler.setFormatter(
-            logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S")
-        )
+        file_handler.setFormatter(logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S"))
     logger.addHandler(file_handler)
 
     logger.debug("Logging configured: level=%s, file=%s", level, log_path)
@@ -69,9 +69,12 @@ class _JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         import json as _json
-        return _json.dumps({
-            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-        })
+
+        return _json.dumps(
+            {
+                "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+            }
+        )

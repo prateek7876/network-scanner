@@ -10,8 +10,12 @@ class TestPortResult:
 
     def test_minimal_creation(self) -> None:
         port = PortResult(
-            port=80, protocol="tcp", state="open",
-            service="http", version="", product="",
+            port=80,
+            protocol="tcp",
+            state="open",
+            service="http",
+            version="",
+            product="",
         )
         assert port.port == 80
         assert port.protocol == "tcp"
@@ -20,9 +24,13 @@ class TestPortResult:
 
     def test_with_banner(self) -> None:
         port = PortResult(
-            port=22, protocol="tcp", state="open",
-            service="ssh", version="8.2p1",
-            product="OpenSSH", banner="SSH-2.0-OpenSSH_8.2p1",
+            port=22,
+            protocol="tcp",
+            state="open",
+            service="ssh",
+            version="8.2p1",
+            product="OpenSSH",
+            banner="SSH-2.0-OpenSSH_8.2p1",
         )
         assert port.banner == "SSH-2.0-OpenSSH_8.2p1"
 
@@ -41,14 +49,34 @@ class TestScanTarget:
 
     def test_mixed_ports(self) -> None:
         target = ScanTarget(
-            ip="10.0.0.1", hostname="", state="up",
+            ip="10.0.0.1",
+            hostname="",
+            state="up",
             ports=[
-                PortResult(port=80, protocol="tcp", state="open",
-                           service="http", version="", product=""),
-                PortResult(port=443, protocol="tcp", state="filtered",
-                           service="https", version="", product=""),
-                PortResult(port=3306, protocol="tcp", state="closed",
-                           service="mysql", version="", product=""),
+                PortResult(
+                    port=80,
+                    protocol="tcp",
+                    state="open",
+                    service="http",
+                    version="",
+                    product="",
+                ),
+                PortResult(
+                    port=443,
+                    protocol="tcp",
+                    state="filtered",
+                    service="https",
+                    version="",
+                    product="",
+                ),
+                PortResult(
+                    port=3306,
+                    protocol="tcp",
+                    state="closed",
+                    service="mysql",
+                    version="",
+                    product="",
+                ),
             ],
         )
         assert len(target.open_ports) == 1
@@ -87,7 +115,10 @@ class TestScanReport:
     def test_invalid_port_data(self) -> None:
         """Model should handle port data gracefully."""
         target = ScanTarget(
-            ip="10.0.0.1", hostname="", state="up", ports=[],
+            ip="10.0.0.1",
+            hostname="",
+            state="up",
+            ports=[],
         )
         assert target.open_ports == []
         assert target.filtered_ports == []

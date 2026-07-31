@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import logging
 import socket
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from netscan.exceptions import ScanError
 from netscan.models import ScanReport
 
 logger = logging.getLogger("netscan.banner")
@@ -98,7 +97,11 @@ def grab_banners(
                 if port.state != "open":
                     continue
                 future = pool.submit(
-                    _grab_banner, target.ip, port.port, port.service, timeout,
+                    _grab_banner,
+                    target.ip,
+                    port.port,
+                    port.service,
+                    timeout,
                 )
                 futures.append((future, target, port))
 
